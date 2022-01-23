@@ -136,7 +136,8 @@ and lower than 6 elements (4, 5, 6, 7, 8 and 9).
 lowerAndGreater:: Int -> [Int] -> [Char]
 lowerAndGreater n list = result
   where
-    count = \f -> show $ length $ filter (f n) list
-    lower = count (>)
-    greater = count (<)
-    result = show n ++ " is greater than " ++ lower ++ " elements and lower than " ++ greater ++ " elements"
+    count:: (Int, Int) -> Int -> (Int, Int)
+    count = \(a, b) x -> (a + if n > x then 1 else 0, b + if n < x then 1 else 0)
+
+    (greater, lower) = foldl count (0, 0) list
+    result = show n ++ " is greater than " ++ show greater ++ " elements and lower than " ++ show lower ++ " elements"
