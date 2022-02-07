@@ -25,7 +25,10 @@ module Lecture2
     , evenLists
     , dropSpaces
 
-    , Knight (..)
+    , Knight
+    , createKnight
+    , Dragon
+    , createDragon
     , dragonFight
 
       -- * Hard
@@ -52,7 +55,9 @@ zero, you can stop calculating product and return 0 immediately.
 84
 -}
 lazyProduct :: [Int] -> Int
-lazyProduct = error "TODO"
+lazyProduct [] = 1
+lazyProduct (0:_) = 0
+lazyProduct (x:xs) = x * lazyProduct xs
 
 {- | Implement a function that duplicates every element in the list.
 
@@ -62,7 +67,8 @@ lazyProduct = error "TODO"
 "ccaabb"
 -}
 duplicate :: [a] -> [a]
-duplicate = error "TODO"
+duplicate [] = []
+duplicate (x:xs) = x : x : duplicate xs
 
 {- | Implement function that takes index and a list and removes the
 element at the given position. Additionally, this function should also
@@ -74,7 +80,16 @@ return the removed element.
 >>> removeAt 10 [1 .. 5]
 (Nothing,[1,2,3,4,5])
 -}
-removeAt = error "TODO"
+removeAt:: Int -> [a] -> (Maybe a, [a])
+removeAt _ [] = (Nothing, [])
+removeAt 0 (x:xs) = (Just x, xs)
+removeAt n xs
+  | n < 0 = (Nothing, xs)
+  | otherwise = bisect n [] xs
+    where
+      bisect _ _ [] = (Nothing, xs)
+      bisect 0 left (y:ys) = (Just y, left <> ys)
+      bisect position left (y:ys) = bisect (position - 1) (left <> [y]) ys
 
 {- | Write a function that takes a list of lists and returns only
 lists of even lengths.
@@ -85,7 +100,8 @@ lists of even lengths.
 ♫ NOTE: Use eta-reduction and function composition (the dot (.) operator)
   in this function.
 -}
-evenLists = error "TODO"
+evenLists:: [[a]] -> [[a]]
+evenLists = filter (even . length)
 
 {- | The @dropSpaces@ function takes a string containing a single word
 or number surrounded by spaces and removes all leading and trailing
@@ -101,7 +117,8 @@ spaces.
 
 🕯 HINT: look into Data.Char and Prelude modules for functions you may use.
 -}
-dropSpaces = error "TODO"
+dropSpaces:: [Char] -> [Char]
+dropSpaces = head . words
 
 {- |
 
@@ -118,24 +135,21 @@ As a reward, the knight can take the treasure chest.
 Below is the description of the fight and character specifications:
 
   * A chest contains a non-zero amount of gold and a possible treasure.
-    When defining the type of a treasure chest, you don't know what
-    treasures it stores insight, so your chest data type must be able
-    to contain any possible treasure.
-  * As a reward, knight takes all the gold, the treasure and experience.
+  * As a reward, knight takes all the gold, the treasure and dExp.
   * Experience is calculated based on the dragon type. A dragon can be
     either red, black or green.
-  * Red dragons grant 100 experience points, black dragons — 150, and green — 250.
+  * Red dragons grant 100 dExp points, black dragons — 150, and green — 250.
   * Stomachs of green dragons contain extreme acid and they melt any
     treasure except gold. So green dragons has only gold as reward.
     All other dragons always contain treasure in addition to gold.
-  * Knight tries to slay dragon with their sword. Each sword strike
+  * Knight tries to slay dragon with their sword. Each sword strikes
     decreases dragon health by the "sword attack" amount. When the
     dragon health becomes zero or less, a dragon dies and the knight
     takes the reward.
   * After each 10 sword strikes, dragon breathes fire and decreases
     knight health by the amount of "dragon fire power". If the
     knight's health becomes 0 or less, the knight dies.
-  * Additionally, each sword strike decreases "knight's endurance" by one.
+  * Additionally, each sword strikes decreases "knight's endurance" by one.
     If knight's endurance becomes zero, they become tired and are not
     able to continue the fight so they run away.
 
@@ -145,7 +159,7 @@ one of the three possible fight outcomes.
 
 You're free to define any helper functions.
 
-🕯 HINT: If you find the description overwhelming to implement entirely
+🕯 HINT: If you bisect the description overwhelming to implement entirely
   from scratch, try modelling the problem in stages.
 
     1. Implement all custom data types without using polymorphism.
@@ -158,21 +172,90 @@ You're free to define any helper functions.
 -}
 
 -- some help in the beginning ;)
-data Knight = Knight
-    { knightHealth    :: Int
-    , knightAttack    :: Int
-    , knightEndurance :: Int
-    }
+newtype Health = Health Int
+newtype Attack = Attack Int
+newtype Endurance = Endurance Int
+newtype StrikesCount = StrikesCount Int
+newtype Gold = Gold Int
+  deriving Show
+newtype Experience = Experience Int
+  deriving Show
 
-dragonFight = error "TODO"
+data Knight = Knight
+  { kHealth    :: Health
+  , kAttack    :: Attack
+  , kEndurance :: Endurance
+  , kStrikes   :: StrikesCount
+  }
+data Treasure = Armor | Weapon | Gems
+  deriving Show
+data Chest = Chest Gold (Maybe [Treasure])
+data DragonType = Red | Black | Green
+data Dragon = Dragon
+  { dExperience :: Experience
+  , dChest :: Chest
+  , dHealth :: Health
+  , dAttack :: Attack
+  }
+data FightOutcome = Victory Experience Gold (Maybe [Treasure]) | Death | Escape
+  deriving Show
+
+createKnight:: Health -> Attack -> Endurance -> Knight
+createKnight health attack endurance = Knight health attack endurance (StrikesCount 1)
+
+createDragon:: DragonType -> Gold -> [Treasure] -> Health -> Attack -> Dragon
+createDragon Red gold treasure health attack = Dragon
+  { dExperience = Experience 100
+  , dChest = Chest gold (Just treasure)
+  , dHealth = health
+  , dAttack = attack
+  }
+createDragon Black gold treasure health attack = Dragon
+  { dExperience = Experience 150
+  , dChest = Chest gold (Just treasure)
+  , dHealth = health
+  , dAttack = attack
+  }
+createDragon Green gold _ health attack = Dragon
+  { dExperience = Experience 250
+  , dChest = Chest gold Nothing
+  , dHealth = health
+  , dAttack = attack
+  }
+
+incrementKnightStrike:: Knight -> Knight
+incrementKnightStrike knight@(Knight _ _ _ (StrikesCount count)) =
+  knight { kStrikes = StrikesCount (count + 1) }
+
+resetKnightStrike:: Knight -> Knight
+resetKnightStrike knight = knight { kStrikes = StrikesCount 0 }
+
+hit:: Health -> Attack -> Health
+hit (Health health) (Attack damage) = Health (health - damage)
+
+hitDragon:: Knight -> Dragon -> Dragon
+hitDragon knight dragon = dragon { dHealth = hit (dHealth dragon) (kAttack knight)}
+
+hitKnight:: Dragon -> Knight -> Knight
+hitKnight dragon knight = knight { kHealth = hit (kHealth knight) (dAttack dragon)}
+
+dragonFight:: Knight -> Dragon -> FightOutcome
+dragonFight
+  knight@(Knight (Health knightHealth) _ (Endurance endurance) (StrikesCount strikes))
+  dragon@(Dragon dExp (Chest gold treasures) (Health dragonHealth) _)
+    | knightHealth <= 0 = Death
+    | endurance <= 0 = Escape
+    | strikes == 10 = dragonFight (resetKnightStrike $ hitKnight dragon knight) dragon
+    | dragonHealth <= 0 = Victory dExp gold treasures
+    | otherwise = dragonFight (incrementKnightStrike knight) (hitDragon knight dragon)
 
 ----------------------------------------------------------------------------
 -- Extra Challenges
 ----------------------------------------------------------------------------
 
-{- The following exercises are considered optional. Some of them might be more
-challenging. However, you still may find some of them easier than some of the
-previous ones. Difficulty is a relative concept.
+{- The following exercises are considered more challenging. However,
+you still may bisect some of them easier than some of the previous
+ones. Difficulty is a relative concept.
 -}
 
 {- | Write a function that takes a list of numbers and returns 'True'
@@ -185,7 +268,9 @@ False
 True
 -}
 isIncreasing :: [Int] -> Bool
-isIncreasing = error "TODO"
+isIncreasing [] = True
+isIncreasing [_] = True
+isIncreasing (x:y:ys) = (x <= y) && isIncreasing (y:ys)
 
 {- | Implement a function that takes two lists, sorted in the
 increasing order, and merges them into new list, also sorted in the
@@ -198,7 +283,13 @@ verify that.
 [1,2,3,4,7]
 -}
 merge :: [Int] -> [Int] -> [Int]
-merge = error "TODO"
+merge [] [] = []
+merge [] xs = xs
+merge xs [] = xs
+merge (x:xs) (y:ys)
+  | x > y = y : merge (x:xs) ys
+  | x < y = x : merge xs (y:ys)
+  | otherwise = x : y : merge xs ys
 
 {- | Implement the "Merge Sort" algorithm in Haskell. The @mergeSort@
 function takes a list of numbers and returns a new list containing the
@@ -215,8 +306,11 @@ The algorithm of merge sort is the following:
 [1,2,3]
 -}
 mergeSort :: [Int] -> [Int]
-mergeSort = error "TODO"
-
+mergeSort [] = []
+mergeSort [x] = [x]
+mergeSort xs = merge (mergeSort left) (mergeSort right)
+  where
+    (left, right) = splitAt (length xs `div` 2) xs
 
 {- | Haskell is famous for being a superb language for implementing
 compilers and interpeters to other programming languages. In the next
@@ -268,7 +362,19 @@ data EvalError
 It returns either a successful evaluation result or an error.
 -}
 eval :: Variables -> Expr -> Either EvalError Int
-eval = error "TODO"
+eval _ (Lit x) = Right x
+eval [] (Var varName) = Left (VariableNotFound varName)
+eval vars (Var varName) = maybeToEither $ lookup varName vars
+  where
+    maybeToEither:: Maybe Int -> Either EvalError Int
+    maybeToEither Nothing = Left (VariableNotFound varName)
+    maybeToEither (Just y) = Right y
+eval vars (Add expr1 expr2) = sumEither (eval vars expr1) (eval vars expr2)
+  where
+    sumEither:: Either EvalError Int -> Either EvalError Int -> Either EvalError Int
+    sumEither (Left (VariableNotFound x)) _ = Left (VariableNotFound x)
+    sumEither _ (Left (VariableNotFound x)) = Left (VariableNotFound x)
+    sumEither (Right x) (Right y) = Right (x + y)
 
 {- | Compilers also perform optimizations! One of the most common
 optimizations is "Constant Folding". It performs arithmetic operations
@@ -292,4 +398,21 @@ Write a function that takes and expression and performs "Constant
 Folding" optimization on the given expression.
 -}
 constantFolding :: Expr -> Expr
-constantFolding = error "TODO"
+constantFolding expr = case expr of
+  (Lit x) -> Lit x
+  (Var x) -> Var x
+
+  (Add (Lit x) (Lit y)) -> Lit (x + y)
+  (Add (Lit 0) x) -> x
+  (Add x (Lit 0)) -> x
+
+  (Add (Var x) (Add y z)) -> Add (Var x) $ constantFolding $ Add y z
+  (Add (Add x y) (Var z)) -> Add (Var z) $ constantFolding $ Add x y
+  (Add (Lit x) (Add (Lit y) z)) -> constantFolding $ Add z $ Lit $ x + y
+  (Add (Lit x) (Add y (Lit z))) -> constantFolding $ Add y $ Lit $ x + z
+  (Add (Add (Lit x) y) (Lit z)) -> constantFolding $ Add y $ Lit $ x + z
+  (Add (Add x (Lit y)) (Lit z)) -> constantFolding $ Add x $ Lit $ y + z
+
+  (Add (Add w x) (Add y z)) -> constantFolding $ Add w $ Add x $ Add y z
+  
+  _ -> expr
